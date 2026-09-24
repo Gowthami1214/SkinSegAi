@@ -1,4 +1,4 @@
-# 🧬 SkinGenAI
+# 🧬 SkinSegAI
 
 ### Few-Shot Skin Lesion Segmentation Using Transfer Learning with MobileNetV3-UNet
 
@@ -11,7 +11,7 @@
 
 ## 📌 Project Overview
 
-**SkinGenAI** is a clinical AI research dashboard investigating **low-resource and few-shot medical image segmentation**. Pixel-level annotation of dermoscopic images requires certified dermatologists, making large labeled datasets prohibitively expensive to obtain.
+**SkinSegAI** is a clinical AI research dashboard investigating **low-resource and few-shot medical image segmentation**. Pixel-level annotation of dermoscopic images requires certified dermatologists, making large labeled datasets prohibitively expensive to obtain.
 
 This project examines how well skin lesion segmentation performs when trained on small, annotated subsets:
 **50, 100, 250, and 500 images**, utilizing an ImageNet-pretrained **MobileNetV3-Small** encoder fused into a **U-Net** decoder architecture with multi-scale skip connections.
@@ -117,8 +117,8 @@ skin_lesion_dashboard/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Gowthami1214/SkinGenAI.git
-cd SkinGenAI
+git clone https://github.com/Gowthami1214/SkinSegAi.git
+cd SkinSegAi
 
 # Create virtual environment
 python -m venv venv

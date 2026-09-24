@@ -41,7 +41,7 @@ class NumberedCanvas(canvas.Canvas):
         self.setFillColor(colors.HexColor("#64748b"))
 
         # Running Header
-        self.drawString(54, 755, "SkinGenAI — Few-Shot Skin Lesion Segmentation (MobileNetV3-UNet)")
+        self.drawString(54, 755, "SkinSegAI — Few-Shot Skin Lesion Segmentation (MobileNetV3-UNet)")
         self.setStrokeColor(colors.HexColor("#e2e8f0"))
         self.setLineWidth(0.5)
         self.line(54, 747, 558, 747)
@@ -56,7 +56,7 @@ class NumberedCanvas(canvas.Canvas):
         self.restoreState()
 
 
-def build_pdf(filename="SkinGenAI_Documentation.pdf"):
+def build_pdf(filename="SkinSegAI_Documentation.pdf"):
     pdf_path = Path(filename).resolve()
     doc = SimpleDocTemplate(
         str(pdf_path),
@@ -160,7 +160,7 @@ def build_pdf(filename="SkinGenAI_Documentation.pdf"):
     story = []
 
     # Title Banner
-    story.append(Paragraph("SkinGenAI: Technical Project Documentation", title_style))
+    story.append(Paragraph("SkinSegAI: Technical Project Documentation", title_style))
     story.append(Paragraph("Few-Shot Medical Image Lesion Segmentation Using Transfer Learning with MobileNetV3-UNet", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=TEAL, spaceBefore=0, spaceAfter=8))
 
@@ -168,13 +168,13 @@ def build_pdf(filename="SkinGenAI_Documentation.pdf"):
     story.append(Paragraph("1. Executive Summary & Project Specifications", h1_style))
     meta_data = [
         [Paragraph("Project Title", table_cell_bold), Paragraph("Few-Shot Medical Image Lesion Segmentation with Transfer Learning", table_cell)],
-        [Paragraph("System Identifier", table_cell_bold), Paragraph("<b>SkinGenAI</b> (Interactive Clinical Research Dashboard)", table_cell)],
+        [Paragraph("System Identifier", table_cell_bold), Paragraph("<b>SkinSegAI</b> (Interactive Clinical Research Dashboard)", table_cell)],
         [Paragraph("Model Architecture", table_cell_bold), Paragraph("MobileNetV3-Small (Encoder) + 4-Stage U-Net (Decoder with Skip Connections)", table_cell)],
         [Paragraph("Core Technologies", table_cell_bold), Paragraph("PyTorch 2.11, Torchvision 0.26, Streamlit 1.55, Plotly, NumPy, Pillow", table_cell)],
         [Paragraph("Dataset Benchmark", table_cell_bold), Paragraph("ISIC 2018 Task 1: Lesion Boundary Segmentation (Dermatoscopic RGB + Binary Masks)", table_cell)],
         [Paragraph("Evaluated Splits", table_cell_bold), Paragraph("<b>50, 100, 250, and 500 images</b> (Low-Data / Few-Shot Regimes)", table_cell)],
         [Paragraph("Best Validation Metrics", table_cell_bold), Paragraph("<b>Dice: 87.07% | IoU: 77.52%</b> (at 500 images, Epoch 9)", table_cell)],
-        [Paragraph("Remote Repository", table_cell_bold), Paragraph("https://github.com/Gowthami1214/SkinGenAI", table_cell)],
+        [Paragraph("Remote Repository", table_cell_bold), Paragraph("https://github.com/Gowthami1214/SkinSegAi", table_cell)],
     ]
     t_meta = Table(meta_data, colWidths=[120, 384])
     t_meta.setStyle(TableStyle([
