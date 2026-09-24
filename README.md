@@ -1,249 +1,182 @@
-# 🧬 SkinSeg AI
-### Few-Shot Skin Lesion Segmentation Dashboard
-**MobileNetV3-Small + U-Net | Research Prototype**
+# 🧬 SkinGenAI
+
+### Few-Shot Skin Lesion Segmentation Using Transfer Learning with MobileNetV3-UNet
+
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg)](https://pytorch.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.25%2B-FF4B4B.svg)](https://streamlit.io/)
+[![Dataset](https://img.shields.io/badge/Dataset-ISIC%202018%20Task%201-green.svg)](https://challenge.isic-archive.com/)
 
 ---
 
-## Project Overview
+## 📌 Project Overview
 
-SkinSeg AI is a Streamlit-based AI research dashboard that visualizes and evaluates a
-**few-shot skin lesion segmentation** study. The project investigates how model performance
-changes as the number of labeled training images increases from **50 to 1000**, using a
-MobileNetV3-Small encoder combined with a U-Net decoder.
+**SkinGenAI** is a clinical AI research dashboard investigating **low-resource and few-shot medical image segmentation**. Pixel-level annotation of dermoscopic images requires certified dermatologists, making large labeled datasets prohibitively expensive to obtain.
 
-Training is performed separately on Google Colab (NVIDIA T4 GPU). This dashboard is designed
-to be built **before training finishes** and automatically activates when model files and
-results are placed in the correct locations.
+This project examines how well skin lesion segmentation performs when trained on small, annotated subsets:
+**50, 100, 250, and 500 images**, utilizing an ImageNet-pretrained **MobileNetV3-Small** encoder fused into a **U-Net** decoder architecture with multi-scale skip connections.
+
+All models were trained on Google Colab with NVIDIA T4 GPUs using a hybrid **Dice Loss + BCEWithLogitsLoss**, and evaluated dynamically inside an interactive **Streamlit dashboard**.
 
 ---
 
-## Architecture
+## 🔬 Benchmark Results (Validation Metrics)
+
+Extracted directly from the trained checkpoints:
+
+| Configuration | Training Set Size | Best Epoch | Best Val Dice | Best Val IoU (Jaccard) | Performance Rating |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Exp 1** | **50 images** | 15 | `0.5104` | `0.3621` | Baseline Few-Shot |
+| **Exp 2** | **100 images** | 15 | `0.5765` | `0.4106` | +6.6% Dice Gain |
+| **Exp 3** | **250 images** | 15 | `0.8246` | `0.7081` | Critical Data Threshold (+24.8%) |
+| **Exp 4** | **500 images** | 9 | `0.8707` | `0.7752` | Near-Supervised SOTA (`87.07%`) |
+
+> **Key Research Finding:** An exponential performance jump occurs between **100 and 250 images** (Dice jumps from **57.65%** to **82.46%**), proving that with transfer learning, 250 labeled images provide a strong viability threshold for clinical lesion boundary segmentation.
+
+---
+
+## 🏗️ Architecture & Pipeline
 
 ```
-Input Image (224×224×3)
-        │
-        ▼
-MobileNetV3-Small Encoder  ──── Skip Connections (4 levels) ────┐
-        │                                                         │
-        ▼                                                         │
-Bottleneck (576→256 ch)                                          │
-        │                                                         │
-        ▼                                                         │
-U-Net Decoder ◄───────────────────────────────────────────────────┘
-        │
-        ▼
-Sigmoid → Threshold 0.5
-        │
-        ▼
-Binary Lesion Mask (224×224×1)
+Input Image (224 × 224 × 3)
+         │
+         ▼
+MobileNetV3-Small Encoder (ImageNet Pretrained)
+  ├─ features[0] (112×112, 16 ch) ───────────────► Skip 4 ──┐
+  ├─ features[1] (56×56, 16 ch)   ───────────────► Skip 3 ──┼─┐
+  ├─ features[2] (28×28, 24 ch)   ───────────────► Skip 2 ──┼─┼─┐
+  ├─ features[8] (14×14, 48 ch)   ───────────────► Skip 1 ──┼─┼─┼─┐
+  └─ features[12] Bridge (7×7, 576 ch)                      │ │ │ │
+         │                                                  │ │ │ │
+         ▼                                                  │ │ │ │
+ConvTranspose2d (576 → 48, 14×14) + Concat ◄────────────────┘ │ │ │
+  └─ ConvBlock1 (96 → 48)                                     │ │ │
+         │                                                    │ │ │
+         ▼                                                    │ │ │
+ConvTranspose2d (48 → 24, 28×28) + Concat ◄───────────────────┘ │ │
+  └─ ConvBlock2 (48 → 24)                                       │ │
+         │                                                      │ │
+         ▼                                                      │ │
+ConvTranspose2d (24 → 16, 56×56) + Concat ◄─────────────────────┘ │
+  └─ ConvBlock3 (32 → 16)                                         │
+         │                                                        │
+         ▼                                                        │
+ConvTranspose2d (16 → 16, 112×112) + Concat ◄─────────────────────┘
+  └─ ConvBlock4 (32 → 16)
+         │
+         ▼
+ConvTranspose2d (16 → 16, 224×224)
+         │
+         ▼
+Final Conv (1×1, 16 → 1 logit)
+         │
+         ▼
+Sigmoid Function (Threshold = 0.5)
+         │
+         ▼
+Binary Lesion Mask (224 × 224 × 1)
 ```
-
-| Component        | Detail                                    |
-|------------------|-------------------------------------------|
-| Encoder          | MobileNetV3-Small (ImageNet pretrained)   |
-| Decoder          | U-Net with 4 skip-connection stages       |
-| Loss             | Dice Loss + BCEWithLogitsLoss             |
-| Input resolution | 224 × 224                                 |
-| Threshold        | 0.5 on sigmoid output                     |
-| Output           | 1-channel binary segmentation mask        |
 
 ---
 
-## Folder Structure
+## 📂 Project Structure
 
 ```
 skin_lesion_dashboard/
 │
-├── app.py                          ← Main Streamlit entry point
-├── requirements.txt
-├── README.md
+├── app.py                      # Interactive 6-page Streamlit Dashboard
+├── requirements.txt            # Dependency specifications
+├── README.md                   # Project documentation
 │
 ├── src/
-│   ├── __init__.py
-│   ├── model.py                    ← MobileNetV3UNet class (exact training arch)
-│   ├── inference.py                ← Prediction + visualization helpers
-│   ├── metrics.py                  ← Dice, IoU, Precision, Recall
-│   ├── preprocessing.py            ← Training-identical transforms
-│   └── utils.py                    ← Model discovery, CSV loading, formatting
+│   ├── model.py                # MobileNetV3UNet exact PyTorch architecture
+│   ├── inference.py            # Preprocessing, forward pass, heatmaps & overlays
+│   ├── metrics.py              # Dice, IoU, Precision, Recall calculation
+│   ├── preprocessing.py        # ImageNet normalization and 224×224 resizing
+│   └── utils.py                # Multi-folder checkpoint discovery and data loader
 │
-├── models/                         ← Place trained .pth files here
+├── models/                     # Trained checkpoint storage (.pth)
 │   ├── mobilenetv3_unet_50_best.pth
 │   ├── mobilenetv3_unet_100_best.pth
 │   ├── mobilenetv3_unet_250_best.pth
-│   ├── mobilenetv3_unet_500_best.pth
-│   └── mobilenetv3_unet_1000_best.pth
+│   └── mobilenetv3_unet_500_best.pth
 │
-├── results/                        ← Place experiment CSV here
+├── results/                    # Validation and evaluation CSV
 │   └── few_shot_experiment_results.csv
 │
-└── sample_data/
-    ├── images/                     ← ISIC_XXXXXXX.jpg
-    └── masks/                      ← ISIC_XXXXXXX_segmentation.png
+└── sample_data/                # Ground truth test pairs (ISIC convention)
+    ├── images/                 # e.g., ISIC_0000001.jpg
+    └── masks/                  # e.g., ISIC_0000001_segmentation.png
 ```
 
 ---
 
-## Installation
+## 🚀 Getting Started
+
+### 1. Prerequisites & Environment Setup
 
 ```bash
-# Create and activate a virtual environment (recommended)
-python -m venv venv
-venv\Scripts\activate          # Windows
+# Clone the repository
+git clone https://github.com/Gowthami1214/SkinGenAI.git
+cd SkinGenAI
 
-# Install dependencies
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On Linux/macOS:
+source venv/bin/activate
+
+# Install required dependencies
 pip install -r requirements.txt
 ```
 
-> **Note:** If you have a CUDA-enabled GPU, install the CUDA build of PyTorch from
-> https://pytorch.org/get-started/locally/ before running `pip install -r requirements.txt`.
-
----
-
-## Running the Dashboard
+### 2. Launch the Streamlit Dashboard
 
 ```bash
 streamlit run app.py
 ```
 
-The dashboard opens at `http://localhost:8501` and works immediately — even without any
-trained model files. Missing models are shown with a friendly placeholder message.
+The application will launch in your browser at `http://localhost:8501`.
 
 ---
 
-## Adding Trained Models
+## 🖥️ Dashboard Features
 
-After training completes on Colab, download the `.pth` checkpoint files and place them in
-the `models/` folder using the **exact filenames**:
+1. **🏠 Executive Dashboard**:
+   - System status indicators showing active/loaded models.
+   - Experiment progression pipeline (50 → 100 → 250 → 500).
+   - Live Validation Score Cards displaying real Dice and IoU coefficients.
+   - Progress bar comparisons with threshold color coding.
 
-| Training Size | Expected Filename                        |
-|---------------|------------------------------------------|
-| 50 images     | `mobilenetv3_unet_50_best.pth`           |
-| 100 images    | `mobilenetv3_unet_100_best.pth`          |
-| 250 images    | `mobilenetv3_unet_250_best.pth`          |
-| 500 images    | `mobilenetv3_unet_500_best.pth`          |
-| 1000 images   | `mobilenetv3_unet_1000_best.pth`         |
+2. **🔬 Experiment Lab**:
+   - Per-configuration inspection (hyperparameters, loss, early stopping).
+   - Interactive Plotly curves: Data Size vs. Dice and Data Size vs. IoU.
+   - Empirical research insights dynamically derived from checkpoint results.
 
-The dashboard automatically detects which files are present on every page load.
+3. **🎯 Segmentation Studio**:
+   - Upload any dermoscopic image (PNG/JPG).
+   - Select between any of the 4 trained checkpoints (50, 100, 250, 500).
+   - 4-panel visualizer: Original Image, Probability Heatmap (turbo/jet), Binary Mask (0.5 threshold), and Lesion Overlay.
+   - Prediction statistics: Lesion Area % and inference latency in milliseconds.
 
-### Supported checkpoint formats
+4. **📊 Model Comparison**:
+   - Validation Score Cards with exact 4-decimal precision.
+   - **🔥 Dice Coefficient Matrix Heatmap**: Heatmap displaying metric profiles per model.
+   - Side-by-side grouped bar charts and trend curves.
+   - Configuration radar fingerprints.
 
-```python
-# Format A — state dict only
-torch.save(model.state_dict(), path)
+5. **🧪 Test Evaluation**:
+   - Pairwise ground-truth evaluation against ISIC test images.
+   - Computes empirical Dice, IoU, Precision, and Recall when ground truth masks are provided.
 
-# Format B — dict with metadata
-torch.save({
-    "model_state_dict": model.state_dict(),
-    "best_val_dice": ...,
-    "best_epoch": ...,
-}, path)
-```
-
-Both formats are handled automatically. If Format B is used, checkpoint metadata
-(best validation Dice, best epoch) is displayed inside the Segmentation Studio.
-
----
-
-## Adding Experiment Results
-
-Place the training results CSV at:
-
-```
-results/few_shot_experiment_results.csv
-```
-
-Expected columns (any subset is acceptable; the dashboard auto-detects available columns):
-
-| Column           | Description                              |
-|------------------|------------------------------------------|
-| `train_size`     | Number of training images (required)     |
-| `best_epoch`     | Epoch at which best validation Dice occurred |
-| `best_val_dice`  | Best validation Dice coefficient         |
-| `test_dice`      | Test-set Dice coefficient                |
-| `test_iou`       | Test-set IoU (Jaccard index)             |
-| `test_precision` | Test-set Precision                       |
-| `test_recall`    | Test-set Recall                          |
-
-Example CSV:
-
-```csv
-train_size,best_epoch,best_val_dice,test_dice,test_iou,test_precision,test_recall
-50,8,0.623,0.601,0.441,0.675,0.553
-100,12,0.712,0.698,0.541,0.743,0.662
-250,18,0.781,0.769,0.628,0.812,0.731
-500,23,0.824,0.817,0.697,0.849,0.789
-1000,31,0.858,0.851,0.742,0.877,0.828
-```
+6. **ℹ️ About Project**:
+   - Clinical context, architecture diagrams, and medical AI disclaimers.
 
 ---
 
-## Adding Test Images and Masks
+## ⚖️ Clinical Disclaimer
 
-Place dermoscopic images in `sample_data/images/` and their ground-truth masks in
-`sample_data/masks/` using ISIC naming convention:
-
-```
-sample_data/
-├── images/
-│   ├── ISIC_0000001.jpg
-│   └── ISIC_0000002.jpg
-└── masks/
-    ├── ISIC_0000001_segmentation.png
-    └── ISIC_0000002_segmentation.png
-```
-
-> Images and masks are matched by ISIC ID, **not** by directory order.
-
-Masks must be grayscale PNG files where:
-- **White (255)** = lesion region
-- **Black (0)** = background
-
----
-
-## Dashboard Pages
-
-| Page                  | Purpose                                                         |
-|-----------------------|-----------------------------------------------------------------|
-| **Dashboard**         | Overview, KPIs, experiment progression, results summary         |
-| **Experiment Lab**    | Per-experiment config, performance charts, research insights    |
-| **Segmentation Studio** | Upload any image, run prediction, 4-panel visualization       |
-| **Model Comparison**  | Multi-metric line and radar charts across all configurations    |
-| **Test Evaluation**   | Ground-truth comparison: Dice, IoU, Precision, Recall          |
-| **About Project**     | Research background, architecture diagram, component guide     |
-
----
-
-## Missing Models — Graceful Degradation
-
-The dashboard never crashes due to a missing file. Instead:
-
-- **Missing model**: shows the expected filename and a warning
-- **Missing CSV**: shows a placeholder explaining where to place the file
-- **No test pairs**: explains the naming convention required
-- **Invalid upload**: shows a clear error message
-
-Once files are added, simply refresh the page — no code changes required.
-
----
-
-## Test Evaluation vs Arbitrary Upload
-
-| Feature                    | Test Evaluation (sample_data/) | Segmentation Studio (upload) |
-|----------------------------|---------------------------------|------------------------------|
-| Ground-truth mask          | ✅ Yes                          | ❌ No                         |
-| Dice, IoU, Precision, Recall | ✅ Computed from GT            | ❌ Not calculated             |
-| Lesion pixel percentage    | ✅ Yes                          | ✅ Yes                        |
-| Probability heatmap        | ❌ Not shown                    | ✅ Yes                        |
-| Inference time             | ✅ Yes                          | ✅ Yes                        |
-
-Metrics are **never fabricated** for images without ground truth.
-
----
-
-## Disclaimer
-
-> This is a **research prototype** built for academic demonstration purposes.
-> Model predictions are not clinically validated and must not be used for medical diagnosis.
-> Always consult a qualified healthcare professional for skin lesion concerns.
-#   S k i n G e n A I  
- 
+> **Research Prototype:** This application and its models are built solely for academic research and educational exploration of few-shot transfer learning in medical imaging. The segmentation outputs are not clinically certified and must **never** be used for primary diagnosis or direct clinical decision-making. Always consult a licensed dermatologist for skin lesion evaluations.

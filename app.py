@@ -414,8 +414,8 @@ if PAGE == "Dashboard":
     # ── KPI Cards ───────────────────────────────────────────────────────────
     cols = st.columns(4)
     kpis = [
-        ("5", "Training Configurations"),
-        ("1000", "Maximum Training Images"),
+        ("4", "Training Configurations"),
+        ("500", "Maximum Training Images"),
         ("224×224", "Input Resolution"),
         ("MobileNetV3", "Lightweight Encoder"),
     ]
@@ -429,8 +429,8 @@ if PAGE == "Dashboard":
     section_header("Experiment Progression", "🔭")
     avail = cached_discover_models()
 
-    prog_cols = st.columns(9)
-    sizes_str = ["50", "→", "100", "→", "250", "→", "500", "→", "1000"]
+    prog_cols = st.columns(7)
+    sizes_str = ["50", "→", "100", "→", "250", "→", "500"]
     for i, (col, label) in enumerate(zip(prog_cols, sizes_str)):
         with col:
             if label == "→":
@@ -642,7 +642,7 @@ elif PAGE == "Experiment Lab":
     if "selected_exp" not in st.session_state:
         st.session_state.selected_exp = 250
 
-    sel_cols = st.columns(5)
+    sel_cols = st.columns(len(TRAIN_SIZES))
     for i, sz in enumerate(TRAIN_SIZES):
         with sel_cols[i]:
             label = f"{'✓ ' if model_exists(sz) else ''}{sz} Images"
@@ -866,15 +866,46 @@ elif PAGE == "Segmentation Studio":
     left_col, right_col = st.columns([1, 2])
 
     with left_col:
-        section_header("Upload Image", "📤")
-        uploaded = st.file_uploader(
-            "Accept: PNG, JPG, JPEG",
-            type=["png", "jpg", "jpeg"],
+        section_header("Image Input", "🖼️")
+        input_mode = st.radio(
+            "Select Input Source",
+            ["Sample ISIC Images", "Upload Custom Image"],
+            horizontal=True,
             label_visibility="collapsed",
         )
 
+        test_pairs = discover_test_pairs()
+        img = None
+
+        if input_mode == "Sample ISIC Images":
+            if test_pairs:
+                pair_names = [p["id"] for p in test_pairs]
+                sel_pair_id = st.selectbox(
+                    "Choose Sample Image",
+                    pair_names,
+                    format_func=lambda x: f"ISIC Sample: {x}",
+                    label_visibility="collapsed",
+                )
+                chosen_pair = next(p for p in test_pairs if p["id"] == sel_pair_id)
+                img = Image.open(chosen_pair["image"]).convert("RGB")
+            else:
+                st.info("No sample images found. Upload your own image below.")
+                input_mode = "Upload Custom Image"
+
+        if input_mode == "Upload Custom Image":
+            uploaded = st.file_uploader(
+                "Accept: PNG, JPG, JPEG",
+                type=["png", "jpg", "jpeg"],
+                label_visibility="collapsed",
+            )
+            if uploaded:
+                try:
+                    img = load_image_rgb(uploaded)
+                except Exception:
+                    st.error("Invalid image file. Please upload a valid JPG or PNG.")
+
         st.markdown("<br>", unsafe_allow_html=True)
-        section_header("Select Model", "🤖")
+        section_header("Model & Settings", "🤖")
 
         if not avail:
             st.markdown(
@@ -897,23 +928,33 @@ elif PAGE == "Segmentation Studio":
             )
             st.session_state.studio_model_size = sel_model_size
 
+            # Interactive confidence threshold slider
+            conf_thresh = st.slider(
+                "Confidence Threshold",
+                min_value=0.10,
+                max_value=0.90,
+                value=0.50,
+                step=0.05,
+                help="Adjust sensitivity for boundary classification. Lower values detect more lesion pixels; higher values ensure higher certainty.",
+            )
+
             st.markdown(
                 f'<div class="sk-card" style="margin-top:8px;">'
                 f'<div class="cfg-row"><span class="cfg-key">Training Data</span><span class="cfg-val">{sel_model_size} images</span></div>'
                 f'<div class="cfg-row"><span class="cfg-key">Architecture</span><span class="cfg-val">MobileNetV3-Small U-Net</span></div>'
-                f'<div class="cfg-row"><span class="cfg-key">Threshold</span><span class="cfg-val">0.5</span></div>'
+                f'<div class="cfg-row"><span class="cfg-key">Threshold</span><span class="cfg-val">{conf_thresh:.2f}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
     with right_col:
-        if uploaded is None:
+        if img is None:
             st.markdown(
                 '<div class="sk-card" style="min-height:400px;display:flex;align-items:center;'
                 'justify-content:center;text-align:center;">'
                 '<div>'
                 '<div style="font-size:3rem;margin-bottom:12px;">🩺</div>'
-                '<div style="color:#8892a4;font-size:0.9rem;">Upload a dermoscopic image<br>to begin segmentation.</div>'
+                '<div style="color:#8892a4;font-size:0.9rem;">Choose a sample image from the library<br>or upload your own dermoscopic photo.</div>'
                 '</div>'
                 '</div>',
                 unsafe_allow_html=True,
@@ -924,16 +965,6 @@ elif PAGE == "Segmentation Studio":
                 unsafe_allow_html=True,
             )
         else:
-            try:
-                img = load_image_rgb(uploaded)
-            except Exception as e:
-                st.markdown(
-                    '<div class="sk-danger">Unable to process this image. '
-                    'Please upload a valid JPG, JPEG, or PNG image.</div>',
-                    unsafe_allow_html=True,
-                )
-                st.stop()
-
             # Load model
             mp = str(model_path(sel_model_size))
             with st.spinner("Loading model…"):
@@ -941,13 +972,13 @@ elif PAGE == "Segmentation Studio":
                     result, device = cached_load_model(mp)
                     model_obj = result["model"]
                     model_meta = result["meta"]
-                except Exception as e:
+                except Exception:
                     show_model_missing(sel_model_size)
                     st.stop()
 
-            # Run inference
+            # Run inference with dynamic threshold
             with st.spinner("Running segmentation…"):
-                pred = predict_mask(model_obj, img, device)
+                pred = predict_mask(model_obj, img, device, threshold=conf_thresh)
 
             prob_map    = pred["prob_map"]
             binary_mask = pred["binary_mask"]
@@ -968,9 +999,20 @@ elif PAGE == "Segmentation Studio":
             with p2:
                 st.image(heatmap_rgb, caption="Probability Heatmap", use_container_width=True)
             with p3:
-                st.image(mask_rgb, caption="Binary Mask", use_container_width=True)
+                st.image(mask_rgb, caption=f"Binary Mask (θ={conf_thresh:.2f})", use_container_width=True)
             with p4:
                 st.image(overlay_rgb, caption="Lesion Overlay", use_container_width=True)
+
+            # Export download button
+            buf = io.BytesIO()
+            mask_rgb.save(buf, format="PNG")
+            st.download_button(
+                label="📥 Download Predicted Mask (PNG)",
+                data=buf.getvalue(),
+                file_name=f"predicted_mask_{sel_model_size}imgs_thresh{int(conf_thresh*100)}.png",
+                mime="image/png",
+                use_container_width=True,
+            )
 
             # Stats
             st.markdown("<br>", unsafe_allow_html=True)
@@ -982,7 +1024,7 @@ elif PAGE == "Segmentation Studio":
                 ("Inference Time", f"{inf_ms:.0f} ms"),
                 ("Model", f"{sel_model_size}-img"),
                 ("Resolution", f"{INPUT_SIZE}×{INPUT_SIZE}"),
-                ("Threshold", "0.5"),
+                ("Threshold", f"{conf_thresh:.2f}"),
             ]
             for col, (lbl, val) in zip(stat_cols, stats):
                 with col:
@@ -993,7 +1035,9 @@ elif PAGE == "Segmentation Studio":
                 st.markdown("<br>", unsafe_allow_html=True)
                 meta_parts = []
                 if "best_val_dice" in model_meta:
-                    meta_parts.append(f"Best Val Dice: <strong>{model_meta['best_val_dice']:.3f}</strong>")
+                    meta_parts.append(f"Best Val Dice: <strong>{model_meta['best_val_dice']:.4f}</strong>")
+                if "best_val_iou" in model_meta:
+                    meta_parts.append(f"Best Val IoU: <strong>{model_meta['best_val_iou']:.4f}</strong>")
                 if "best_epoch" in model_meta:
                     meta_parts.append(f"Best Epoch: <strong>{model_meta['best_epoch']}</strong>")
                 if meta_parts:
@@ -1001,6 +1045,21 @@ elif PAGE == "Segmentation Studio":
                         f'<div class="sk-info">Checkpoint info — {" · ".join(meta_parts)}</div>',
                         unsafe_allow_html=True,
                     )
+
+            # ── Comparative Visual Evaluation Across All Available Models ────────
+            if len(avail) > 1:
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("🔬 Compare All Available Models on This Image", expanded=True):
+                    comp_cols = st.columns(len(avail))
+                    for c_col, (m_sz, m_p) in zip(comp_cols, avail.items()):
+                        with c_col:
+                            try:
+                                m_res, m_dev = cached_load_model(str(m_p))
+                                m_pred = predict_mask(m_res["model"], img, m_dev, threshold=conf_thresh)
+                                m_overlay = overlay_mask_on_image(img, m_pred["binary_mask"])
+                                st.image(m_overlay, caption=f"{m_sz} Images (Area: {m_pred['lesion_pct']:.1f}%)", use_container_width=True)
+                            except Exception as e:
+                                st.caption(f"{m_sz}-img: Error")
 
             st.markdown(
                 '<div class="sk-info" style="font-size:0.75rem;margin-top:10px;">'
@@ -1110,10 +1169,8 @@ elif PAGE == "Model Comparison":
             hovertemplate="%{hovertext}<extra></extra>",
             showscale=True,
             colorbar=dict(
-                title="Score",
-                titlefont=dict(color="#8892a4"),
+                title=dict(text="Score", font=dict(color="#8892a4")),
                 tickfont=dict(color="#8892a4"),
-                bgcolor="rgba(0,0,0,0)",
                 len=0.8,
             ),
         ))
@@ -1282,7 +1339,7 @@ elif PAGE == "Model Comparison":
 
     # ── Section 6: Model availability grid ───────────────────────────────────
     section_header("Model File Availability", "💾")
-    avail_cols = st.columns(5)
+    avail_cols = st.columns(len(TRAIN_SIZES))
     for col, sz in zip(avail_cols, TRAIN_SIZES):
         with col:
             exists = model_exists(sz)
@@ -1470,7 +1527,7 @@ low-data segmentation.
 | Step | Detail |
 |------|--------|
 | Dataset | ISIC 2018 Task 1 (dermoscopic images + binary masks) |
-| Training splits | 50 / 100 / 250 / 500 / 1000 images |
+| Training splits | 50 / 100 / 250 / 500 images |
 | Encoder | MobileNetV3-Small (ImageNet pretrained) |
 | Decoder | U-Net with skip connections |
 | Loss | Dice Loss + BCEWithLogitsLoss |
@@ -1535,7 +1592,7 @@ This project studies the following question:
 
 > *How much labeled data does a MobileNetV3-UNet actually need to produce useful segmentations?*
 
-By training five models — each on a progressively larger labeled subset — we can observe:
+By training four models — each on a progressively larger labeled subset (50, 100, 250, 500) — we can observe:
 
 - The **minimum viable training set** that produces acceptable segmentation
 - How **performance scales** with additional labeled data
@@ -1574,8 +1631,7 @@ skin_lesion_dashboard/
 │   ├── mobilenetv3_unet_50_best.pth
 │   ├── mobilenetv3_unet_100_best.pth
 │   ├── mobilenetv3_unet_250_best.pth
-│   ├── mobilenetv3_unet_500_best.pth
-│   └── mobilenetv3_unet_1000_best.pth
+│   └── mobilenetv3_unet_500_best.pth
 │
 ├── results/
 │   └── few_shot_experiment_results.csv

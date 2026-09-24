@@ -43,6 +43,7 @@ def predict_mask(
     model: torch.nn.Module,
     img: Image.Image,
     device: torch.device,
+    threshold: float = THRESHOLD,
 ) -> dict:
     """
     Run segmentation inference on a PIL Image.
@@ -64,7 +65,7 @@ def predict_mask(
     t1 = time.perf_counter()
 
     prob_map    = probs.squeeze().cpu().numpy()           # [H, W]
-    binary_mask = (prob_map > THRESHOLD).astype(np.uint8) # {0,1}
+    binary_mask = (prob_map > threshold).astype(np.uint8) # {0,1}
     lesion_pct  = float(binary_mask.mean() * 100.0)
     inference_ms = (t1 - t0) * 1000.0
 
