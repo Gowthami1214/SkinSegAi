@@ -1005,7 +1005,7 @@ elif PAGE == "Segmentation Studio":
 
             # Export download button
             buf = io.BytesIO()
-            mask_rgb.save(buf, format="PNG")
+            Image.fromarray(mask_rgb).save(buf, format="PNG")
             st.download_button(
                 label="📥 Download Predicted Mask (PNG)",
                 data=buf.getvalue(),
